@@ -91,7 +91,80 @@ docker compose build
 docker compose run --rm agent bash -c 'echo ready && python --version && conda env list'
 ```
 
-If the smoke run prints `ready`, your conda env is the active one, and python is 3.12.x, the wiring is correct. From here, `docker compose run --rm agent codex exec --ephemeral -s danger-full-access -C /workspace/new-project -o /workspace/new-project/report.md "<prompt>"` is the canonical handoff command.
+If the smoke run prints `ready`, your conda env is the active one, and python is 3.12.x, the wiring is correct. The next section shows how to actually drive the container for handoff jobs.
+
+## Operational recipes
+
+### Spawned-shell sandbox modes (`-s` flag)
+
+`codex exec` spawns shells under codex's own sandbox. Default is `workspace-write`: writes allowed in cwd and TMPDIR, **network disabled**. So `pytest`, `git`, `pip install -e`, file edits, and conda-only commands work fine — but anything codex spawns that calls a remote API (Bedrock / Anthropic SDK / LiteLLM), pulls from PyPI, or pushes to git will hang or time out.
+
+For unattended jobs that hit the network, switch the mode:
+
+```bash
+codex exec -s danger-full-access ...
+```
+
+The available modes are `read-only` (diagnosis), `workspace-write` (default; safe for non-network work), and `danger-full-access` (live-LLM, package installs, git push). Mode is per-invocation — a TDD phase with no live calls can use the safer default while a live-LLM smoke uses `danger-full-access`.
+
+`-s danger-full-access` is **not** the same as `--dangerously-bypass-approvals-and-sandbox`. The bypass flag is forbidden (it suppresses approvals and audit). `-s danger-full-access` only widens the spawned-shell sandbox; approvals still resolve against the mounted host trust config.
+
+### Canonical detached-handoff recipe
+
+For unattended handoff (e.g. an `implement-from-doc` phase, an overnight smoke), launch detached with a name and an output file:
+
+```bash
+docker compose run -T --interactive=false -d \
+  --name <task-name> \
+  agent \
+  codex exec --ephemeral \
+    -s danger-full-access \
+    -C /workspace/<project> \
+    -o /workspace/<project>/output/<task-name>-report.md \
+    "<prompt>"
+```
+
+Then poll: `docker wait <task-name>` (blocks until exit), `docker logs <task-name>` for the running narration, read the report file at the `-o` path for the structured result.
+
+For parallel jobs, use distinct `--name` and `-o` per task. Every container gets the full mount set, so any task can edit any file under the workspace — scope prompts accordingly.
+
+`--ephemeral` means no session persistence between handoffs — each task starts context-clean, which is what you want for independent jobs.
+
+### Long prompts via `CODEX_PROMPT` env var
+
+Command-line prompts get unwieldy fast. Pipe via env var instead:
+
+```bash
+CODEX_PROMPT="$(cat /path/to/task_prompt.md)" \
+docker compose run -T --interactive=false -d \
+  --name <task-name> \
+  -e CODEX_PROMPT \
+  agent \
+  codex exec --ephemeral \
+    -s danger-full-access \
+    -C /workspace/<project> \
+    -o /workspace/<project>/output/<task-name>-report.md
+```
+
+The library's `route_args` automatically appends `$CODEX_PROMPT` as the prompt when it's set and the command is `codex exec ...` or interactive `codex`. No prompt argument needed on the command line.
+
+### Claude Code auth in the container
+
+If a project runs **Claude Code** (not just codex) inside the container, host-keychain auth doesn't carry across the bind-mount — `~/.claude*` mounts pass through state but on macOS the actual login is in the keychain. You need a long-lived OAuth token:
+
+1. On the host: `claude setup-token` → produces an `sk-ant-oat01-...` token (requires a Claude subscription).
+2. Export in your shell rc:
+   ```bash
+   export CC_AUTH_TOKEN_FOR_LINUX=sk-ant-oat01-...
+   ```
+3. In `docker-compose.yml`, forward as `CLAUDE_CODE_OAUTH_TOKEN`:
+   ```yaml
+   environment:
+     CLAUDE_CODE_OAUTH_TOKEN: ${CC_AUTH_TOKEN_FOR_LINUX:-}
+   ```
+   (The template's `docker-compose.yml` has this line commented under "Forward any host env vars".)
+
+Do **not** pass the `oat01` token as `ANTHROPIC_API_KEY`. `claude auth status` will misleadingly report `loggedIn: true` but real requests fail with `Invalid API key`.
 
 ## Entrypoint library reference
 
