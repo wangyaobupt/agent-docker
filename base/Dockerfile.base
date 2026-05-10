@@ -1,0 +1,48 @@
+FROM node:24-bookworm
+
+ARG CODEX_VERSION=latest
+ARG CLAUDE_VERSION=latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CONDA_DIR=/opt/conda
+ENV PATH=/opt/conda/bin:/usr/local/bin:${PATH}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    bubblewrap \
+    bzip2 \
+    build-essential \
+    ca-certificates \
+    curl \
+    git \
+    less \
+    openssh-client \
+    procps \
+    ripgrep \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+        amd64) conda_arch="x86_64" ;; \
+        arm64) conda_arch="aarch64" ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && wget -qO /tmp/miniforge.sh \
+        "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${conda_arch}.sh" \
+    && bash /tmp/miniforge.sh -b -p "${CONDA_DIR}" \
+    && rm -f /tmp/miniforge.sh \
+    && conda config --system --set auto_update_conda false \
+    && conda clean -afy
+
+RUN mkdir -p /opt/anaconda3/bin \
+    && ln -sf /opt/conda/bin/conda /opt/anaconda3/bin/conda
+
+RUN npm install -g "@openai/codex@${CODEX_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_VERSION}"
+
+RUN mkdir -p /usr/local/lib/agent-docker /workspace /root/.codex /root/.claude /root/code
+
+COPY lib/entrypoint-lib.sh /usr/local/lib/agent-docker/entrypoint-lib.sh
+RUN chmod 0644 /usr/local/lib/agent-docker/entrypoint-lib.sh
+
+# WORKDIR + ENTRYPOINT + CMD intentionally left for the per-project Dockerfile.

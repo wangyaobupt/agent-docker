@@ -1,0 +1,34 @@
+services:
+  agent:
+    build:
+      context: .
+    image: <PROJECT_NAME>-agent:latest
+    stdin_open: true
+    tty: true
+    working_dir: /workspace/<PROJECT_NAME>
+    environment:
+      CODEX_HOME: /root/.codex
+      CONDA_ENV_NAME: <PROJECT_CONDA_ENV>
+      WORKSPACE: /workspace/<PROJECT_NAME>
+      # Forward any host env vars the project needs (AWS, OAuth, etc.) here.
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # AWS_REGION_NAME: ${AWS_REGION_NAME:-}
+      # CLAUDE_CODE_OAUTH_TOKEN: ${CC_AUTH_TOKEN_FOR_LINUX:-}
+    volumes:
+      - .:/workspace/<PROJECT_NAME>
+      # Trust config — required so codex inherits host approval posture.
+      - /Users/wangyao/.codex:/root/.codex
+      # SSH aliases — required if the project uses vm/git remotes.
+      - /Users/wangyao/.ssh:/root/.ssh:ro
+      # Optional Claude Code state — uncomment if Claude runs in this container:
+      # - /Users/wangyao/.claude:/root/.claude
+      # - /Users/wangyao/.claude.json:/root/.claude.json
+      - <PROJECT_NAME>_conda_envs:/opt/conda/envs
+      - <PROJECT_NAME>_conda_pkgs:/opt/conda/pkgs
+      - <PROJECT_NAME>_pip_cache:/root/.cache/pip
+
+volumes:
+  <PROJECT_NAME>_conda_envs:
+  <PROJECT_NAME>_conda_pkgs:
+  <PROJECT_NAME>_pip_cache:
