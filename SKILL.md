@@ -275,7 +275,7 @@ For CoT specifically, the canonical reference is commit `b9dd6cf` (the bypass-fl
 These are the failure modes that have actually bitten this workflow:
 
 - **Codex broker dies on laptop suspend.** The `codex-companion` broker socket goes stale; jobs report "running" with dead PIDs. Clean `~/.codex/companion/broker.json` and the socket dir, then restart. (Memory: `feedback_codex_broker_dies_on_suspend.md` in the CoT memory tree.)
-- **`bash -lc` loses the conda env.** Login shells re-source profiles and reset `PATH`, dropping the activated conda env. Either use `bash -c '...'` (non-login) or `source /opt/conda/etc/profile.d/conda.sh && conda activate <env>` inside the `-lc` script. (Memory: `feedback_codex_docker_conda_path.md`.)
+- **`bash -lc` loses the conda env.** Login shells re-source profiles and reset `PATH`, dropping the activated conda env. Re-activate inside the `-lc` script: `source /opt/conda/etc/profile.d/conda.sh && conda activate <env> && ...`. (Memory: `feedback_codex_docker_conda_path.md`.)
 - **Disk near-full corrupts Docker overlay2.** The entrypoint re-runs editable installs (~100 MB) on hash mismatch; with <1 GB free, BuildKit metadata corrupts. Pre-check `diskutil info /` before unattended runs. (Memory: `feedback_codex_docker_disk_full_recovery.md`.)
 - **Approval prompt blocks a handoff.** Means the host trust config didn't reach the container. Check that `~/.codex` is mounted at `/root/.codex` and that the project's path is `trust_level = "trusted"` in `~/.codex/config.toml`. **Do not** add the bypass flag as a workaround.
 
