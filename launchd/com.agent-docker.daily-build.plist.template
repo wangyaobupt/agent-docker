@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference copy of the launchd plist for the agent-docker daily build.
+  This file is NOT consumed by scripts/install-launchd-daily-build.sh; that
+  script writes the plist inline. Keep this in sync if you change the
+  installer, or delete it if you prefer a single source of truth.
+  Placeholder: __REPO_DIR__ is the absolute path to this repo.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.agent-docker.daily-build</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO_DIR__/scripts/daily-build.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>__REPO_DIR__/logs/daily-build.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_DIR__/logs/daily-build.launchd.err.log</string>
+</dict>
+</plist>

@@ -5,10 +5,17 @@ CODEX_VERSION="${CODEX_VERSION:-latest}"
 CLAUDE_VERSION="${CLAUDE_VERSION:-latest}"
 DATE_TAG="${DATE_TAG:-$(date +%Y-%m-%d)}"
 PRIMARY_TAG="agent-base:${DATE_TAG}"
+REFRESH="${REFRESH:-0}"
+
+build_flags=()
+if [[ "${REFRESH}" == "1" ]]; then
+  build_flags+=(--pull --no-cache)
+fi
 
 cd "$(dirname "$0")/.."
 
 docker build \
+  "${build_flags[@]}" \
   --build-arg "CODEX_VERSION=${CODEX_VERSION}" \
   --build-arg "CLAUDE_VERSION=${CLAUDE_VERSION}" \
   -f base/Dockerfile.base \

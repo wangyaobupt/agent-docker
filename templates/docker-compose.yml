@@ -2,6 +2,8 @@ services:
   agent:
     build:
       context: .
+      args:
+        AGENT_BASE_TAG: ${AGENT_BASE_TAG:-<AGENT_BASE_DATE_TAG>}
     image: <PROJECT_NAME>-agent:latest
     stdin_open: true
     tty: true

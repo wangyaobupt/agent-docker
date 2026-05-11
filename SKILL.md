@@ -48,24 +48,49 @@ This skill optimizes for **unattended handoff**, not interactive REPL.
 - **Handoff (canonical):** detached `codex exec --ephemeral -s danger-full-access` writing to a `-o <report>` file. Approval gating comes from the mounted trust config; sandbox mode is set explicitly per task. The `route_args` `codex)` case in the library passes these through verbatim.
 - **Interactive (rare):** `docker compose run --rm agent` drops you into the per-project default CMD (interactive `codex`). Useful for debugging the container itself; for actual interactive coding, use `codex` on the host instead — that's the cheaper, faster path.
 
-## Build the base image
+## Version-awareness preflight
+
+A project image is derived from a date-tagged base; rebuilding the base does **not** retroactively update existing project images. Before running a container against a project, run:
+
+```bash
+/Users/wangyao/claudework/agent-docker/scripts/check-project-base.sh /path/to/project
+```
+
+The script reports one of four statuses (default tolerance: 3 days; override with `MAX_AGENT_BASE_AGE_DAYS=N`):
+
+- `current` — proceed.
+- `stale-local-base` — newest local base is older than the window. Run `REFRESH=1 bash base/build.sh` (see below), then re-check (the project may now be `stale`).
+- `stale` — project pins an older base. Rebuild it against the newest local tag and proceed. Projects vary in how they wire `AGENT_BASE_TAG` (compose `build.args`, Dockerfile `ARG` default, custom build script), so inspect the `Dockerfile` and `docker-compose.yml` to pick the right rebuild path.
+- `unable to determine` — project doesn't wire `AGENT_BASE_TAG`. Don't auto-rebuild (the env-var override would be a no-op); inspect the FROM line in `Dockerfile` / `docker-compose.yml` and ask the user.
+
+### Build the base image
+
+Run when the preflight reports `stale-local-base`, or when there's no local image yet:
 
 ```bash
 cd /Users/wangyao/claudework/agent-docker
-bash base/build.sh
+bash base/build.sh                                                # codex@latest, claude@latest
+REFRESH=1 bash base/build.sh                                      # --pull --no-cache (forces @latest re-resolution)
+CODEX_VERSION=0.129.0 CLAUDE_VERSION=2.1.133 bash base/build.sh   # pin specific versions
 ```
 
-Defaults: `codex@latest`, `claude@latest`. Image is tagged three ways:
+Each build is tagged three ways:
 
 - `agent-base:YYYY-MM-DD` — canonical date tag (what projects pin to)
-- `agent-base:YYYY-MM-DD-codex-X.Y.Z-claude-A.B.C` — secondary, audit trail of what versions npm actually resolved
+- `agent-base:YYYY-MM-DD-codex-X.Y.Z-claude-A.B.C` — audit trail of what npm resolved
 - `agent-base:latest` — convenience pointer at the most recent build
 
-To pin specific versions: `CODEX_VERSION=0.129.0 CLAUDE_VERSION=2.1.133 bash base/build.sh`.
+Projects pin to a date tag, not `:latest` — opting into a newer base means editing one date string in their Dockerfile, on their own schedule.
 
-**Why date tags as canonical:** codex and claude release frequently. A version-only tag (`agent-base:codex-0.129.0-...`) forces a project's `FROM` line to change every codex bump. A date tag decouples the per-project pin cadence from the upstream release cadence — projects opt into a newer base by editing one date string in their Dockerfile, on their own schedule.
+**After a fresh base build:** every project image pinned to an older date is now out of date. Re-run the preflight in each affected project and follow the `stale` instructions above to rebuild it.
 
-When to bump: rebuild whenever you want newer codex/claude across new projects, or whenever you want to validate a specific project against newer agents (then change that project's `ARG AGENT_BASE_TAG` to today's date).
+**Prune old base tags.** Keep at most the newest 3 `agent-base:YYYY-MM-DD` builds. The daily launchd job (see README) handles this automatically. If you build manually:
+
+```bash
+bash /Users/wangyao/claudework/agent-docker/scripts/prune-old-bases.sh
+```
+
+(Override the count with `RETAIN_AGENT_BASE_DATES=N`. The script removes both the `agent-base:DATE` tag and its `agent-base:DATE-codex-X-claude-Y` audit-trail tag for each pruned date.)
 
 ## Start a new project
 

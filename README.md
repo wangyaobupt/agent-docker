@@ -11,3 +11,37 @@ The repo provides:
 The canonical documentation is **[SKILL.md](SKILL.md)** — read it before adopting the pattern in a new project. SKILL.md is symlinked into `~/.claude/skills/agent-docker/` and `~/.codex/skills/agent-docker/` so both agents can discover it.
 
 To build the base image: `bash base/build.sh` (defaults to `codex@latest` + `claude@latest`, tags by date).
+
+For a guaranteed refresh that re-pulls the base image and re-resolves npm
+`latest` packages, run:
+
+```bash
+REFRESH=1 bash base/build.sh
+```
+
+To install a daily macOS launchd job that does this at 06:30 local time:
+
+```bash
+bash scripts/install-launchd-daily-build.sh
+```
+
+Build logs are written to `logs/daily-build.log`.
+
+The daily job keeps the newest 3 `agent-base:YYYY-MM-DD` builds by default and
+prunes Docker build cache older than 168 hours. Override with
+`RETAIN_AGENT_BASE_DATES=<count>` or `BUILDER_PRUNE_UNTIL=<duration>` if needed.
+
+Before running a project container, check whether the newest local base image is
+no more than 3 days old and whether that project is pinned to it:
+
+```bash
+scripts/check-project-base.sh /path/to/project
+```
+
+If it reports `status: stale`, rebuild that project image with the reported
+latest date tag, for example:
+
+```bash
+cd /path/to/project
+AGENT_BASE_TAG=YYYY-MM-DD docker compose build
+```
